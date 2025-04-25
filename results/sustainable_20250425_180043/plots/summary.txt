@@ -1,0 +1,16 @@
+Sustainable Traffic Control - Summary Report
+===========================================
+
+This experiment implemented a reinforcement learning approach
+to traffic signal control that addresses SDG 11: Sustainable Cities
+by considering both traffic efficiency and environmental impact.
+
+Key metrics:
+- Average waiting time: 276.15 seconds
+- Maximum waiting time: 2256.00 seconds
+- Average CO2 emissions: 69.31 g/s
+- Total CO2 emissions: 138619.39 g over simulation period
+
+This study demonstrates how intelligent traffic signal control
+can contribute to more sustainable urban environments by reducing
+both congestion and emissions, aligning with SDG 11 goals.
