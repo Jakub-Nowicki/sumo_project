@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sustainable Traffic Control using a 2-way intersection
+Simple Sustainable Traffic Control with SUMO
 Addressing SDG 11: Sustainable Cities and Communities
 """
 
@@ -22,11 +22,11 @@ else:
 from sumo_rl import SumoEnvironment
 
 # Paths to SUMO network and route files
-NET_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl\sumo_rl\nets\2way-single-intersection\single-intersection.net.xml'
-ROUTE_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl\sumo_rl\nets\2way-single-intersection\single-intersection-vhvh.rou.xml'
+NET_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl\sumo_rl\nets\single-intersection\single-intersection.net.xml'
+ROUTE_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl\sumo_rl\nets\single-intersection\single-intersection.rou.xml'
 
 # Create output directory
-OUT_DIR = 'results/sustainable_2way'
+OUT_DIR = 'results/sustainable'
 Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
 # Global dict to store data
@@ -35,10 +35,7 @@ waiting_data = {}
 
 
 def sustainable_reward(traffic_signal):
-    """
-    Custom reward function that balances traffic efficiency with environmental impact
-    This directly addresses SDG 11 by considering both urban mobility and emissions
-    """
+    """Custom reward function for sustainable traffic control"""
     # Get SUMO connection
     sumo = traffic_signal.sumo
 
@@ -357,18 +354,16 @@ def analyze_results(results_dir):
             # Calculate improvement metrics
             first_5_waiting = metrics[metrics['episode'] < 5]['waiting_time'].mean()
             last_5_waiting = metrics[metrics['episode'] >= metrics['episode'].max() - 5]['waiting_time'].mean()
-            waiting_improvement = ((
-                                               first_5_waiting - last_5_waiting) / first_5_waiting) * 100 if first_5_waiting > 0 else 0
+            waiting_improvement = ((first_5_waiting - last_5_waiting) / first_5_waiting) * 100
 
             first_5_co2 = metrics[metrics['episode'] < 5]['co2_emission'].mean()
             last_5_co2 = metrics[metrics['episode'] >= metrics['episode'].max() - 5]['co2_emission'].mean()
-            co2_improvement = ((first_5_co2 - last_5_co2) / first_5_co2) * 100 if first_5_co2 > 0 else 0
+            co2_improvement = ((first_5_co2 - last_5_co2) / first_5_co2) * 100
 
             first_5_reward = episode_rewards[episode_rewards['episode'] <= 5]['reward'].mean()
             last_5_reward = episode_rewards[episode_rewards['episode'] > episode_rewards['episode'].max() - 5][
                 'reward'].mean()
-            reward_improvement = ((last_5_reward - first_5_reward) / abs(
-                first_5_reward)) * 100 if first_5_reward != 0 else 0
+            reward_improvement = ((last_5_reward - first_5_reward) / abs(first_5_reward)) * 100
 
             f.write(f"### Traffic Efficiency\n")
             f.write(f"- Starting waiting time: {first_5_waiting:.2f} seconds\n")
@@ -397,32 +392,14 @@ def analyze_results(results_dir):
 
             f.write("This weighting can be adjusted based on specific urban priorities and needs.\n")
 
-            # Add a section explaining how this connects to specific SDG 11 targets
-            f.write("\n## Connection to Specific SDG 11 Targets\n\n")
-            f.write(
-                "**Target 11.2**: By 2030, provide access to safe, affordable, accessible and sustainable transport systems for all\n")
-            f.write("- Our solution improves traffic flow, making transportation more efficient and sustainable\n")
-            f.write("- Reduced waiting times improve accessibility of transportation systems\n\n")
-
-            f.write("**Target 11.6**: By 2030, reduce the adverse per capita environmental impact of cities\n")
-            f.write("- Our solution directly reduces vehicle emissions in urban areas\n")
-            f.write("- Optimized traffic signals reduce idling time, a major source of unnecessary pollution\n\n")
-
-            f.write(
-                "**Target 11.b**: Implement integrated policies and plans for resource efficiency, mitigation and adaptation to climate change\n")
-            f.write("- This approach demonstrates how AI can be used for smarter resource allocation\n")
-            f.write("- The multi-objective optimization approach shows how competing priorities can be balanced\n\n")
-
         print(f"Analysis complete! Results saved to {plots_dir}")
     except Exception as e:
         print(f"Error analyzing results: {e}")
-        import traceback
-        traceback.print_exc()
 
 
 if __name__ == "__main__":
-    print("Sustainable Traffic Control with 2-way Intersection")
-    print("=================================================")
+    print("Sustainable Traffic Control with SUMO")
+    print("====================================")
     print("This script implements a reinforcement learning approach to traffic")
     print("signal control that addresses SDG 11: Sustainable Cities.\n")
 
