@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """
-Sustainable Traffic Control with SUMO-RL
+Simple Sustainable Traffic Control with SUMO
 Addressing SDG 11: Sustainable Cities and Communities
-
-This script implements a reinforcement learning agent that controls
-traffic signals while considering both traffic efficiency and emissions.
 """
 
 import os
@@ -23,7 +20,6 @@ else:
     sys.exit("Please declare environment variable 'SUMO_HOME'")
 
 from sumo_rl import SumoEnvironment
-from sumo_rl.agents import QLAgent
 
 # Paths to SUMO network and route files
 NET_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl\sumo_rl\nets\single-intersection\single-intersection.net.xml'
@@ -33,66 +29,52 @@ ROUTE_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl
 OUT_DIR = 'results/sustainable'
 Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
-# Global dict to store emission data
+# Global dict to store data
 emission_data = {}
+waiting_data = {}
 
 
 def sustainable_reward(traffic_signal):
-    """
-    Custom reward function that considers both traffic efficiency and emissions
-    Based on the available methods in your SUMO-RL version
-
-    Args:
-        traffic_signal: TrafficSignal object
-
-    Returns:
-        float: Combined reward value
-    """
+    """Custom reward function for sustainable traffic control"""
     # Get SUMO connection
     sumo = traffic_signal.sumo
 
-    # --- Traffic Efficiency Component ---
-    # Use accumulated waiting time per lane (available in your version)
+    # Traffic Efficiency Component - Queue length and waiting time
     waiting_times = traffic_signal.get_accumulated_waiting_time_per_lane()
     total_waiting_time = sum(waiting_times)
-
-    # Also consider queue length
     total_queue = traffic_signal.get_total_queued()
 
-    # Combine waiting time and queue for efficiency reward
-    # Both should be minimized, so negative values
+    # Track waiting time data
+    global waiting_data
+    waiting_data[traffic_signal.id] = waiting_data.get(traffic_signal.id, []) + [total_waiting_time]
+
+    # Efficiency reward (negative values to minimize)
     efficiency_reward = -(total_waiting_time + total_queue)
 
-    # --- Emission Component ---
+    # Emission Component
     total_co2 = 0
-    # Get all vehicles in the traffic signal's lanes
-    vehicle_ids = []
     for lane_id in traffic_signal.lanes:
-        vehicle_ids.extend(sumo.lane.getLastStepVehicleIDs(lane_id))
+        for veh_id in sumo.lane.getLastStepVehicleIDs(lane_id):
+            total_co2 += sumo.vehicle.getCO2Emission(veh_id)  # in mg
 
-    # Calculate total CO2 emissions
-    for veh_id in vehicle_ids:
-        total_co2 += sumo.vehicle.getCO2Emission(veh_id)  # in mg
-
-    # Convert to grams for easier interpretation
+    # Convert to grams for better scale
     total_co2 = total_co2 / 1000.0
 
-    # Emission reward (negative because we want to minimize)
-    emission_reward = -total_co2
-
-    # Store emissions in global dict instead of using metrics
+    # Track emission data
     global emission_data
     emission_data[traffic_signal.id] = emission_data.get(traffic_signal.id, []) + [total_co2]
 
-    # --- Combined Reward ---
-    # Weight factors (80% efficiency, 20% emissions)
+    # Emission reward (negative values to minimize)
+    emission_reward = -total_co2
+
+    # Combined reward with weights
+    # 80% traffic efficiency, 20% emissions
     efficiency_weight = 0.8
     emission_weight = 0.2
 
     # Normalize to prevent one component from dominating
-    # These normalization factors may need tuning based on your scenario
-    norm_efficiency = efficiency_reward / 100.0  # Assuming typical values in hundreds
-    norm_emission = emission_reward / 10.0  # Assuming typical values in tens of grams
+    norm_efficiency = efficiency_reward / 100.0
+    norm_emission = emission_reward / 10.0
 
     # Combined reward
     reward = (efficiency_weight * norm_efficiency) + (emission_weight * norm_emission)
@@ -100,33 +82,87 @@ def sustainable_reward(traffic_signal):
     return reward
 
 
-def run_simulation(use_gui=True, episodes=20):
-    """
-    Run the SUMO-RL simulation with the sustainable reward function
+# Simple Q-learning implementation
+class SimpleQLearning:
+    def __init__(self, action_space, learning_rate=0.1, discount_factor=0.95, exploration_rate=0.1):
+        self.action_space = action_space
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self.exploration_rate = exploration_rate
+        self.q_table = {}  # State-action values
 
-    Args:
-        use_gui: Whether to show the SUMO GUI
-        episodes: Number of episodes to run
+    def get_state_key(self, state):
+        """Convert state to a hashable representation"""
+        if isinstance(state, np.ndarray):
+            # Round and convert to tuple for hashing
+            return tuple((state * 10).astype(int))
+        return str(state)  # Fallback for other types
 
-    Returns:
-        str: Path to results directory
-    """
-    # Create timestamp for results
+    def choose_action(self, state):
+        """Choose action using epsilon-greedy policy"""
+        state_key = self.get_state_key(state)
+
+        # If state not in Q-table, add it
+        if state_key not in self.q_table:
+            self.q_table[state_key] = [0.0] * self.action_space.n
+
+        # Explore or exploit
+        if np.random.random() < self.exploration_rate:
+            return self.action_space.sample()  # Random action
+        else:
+            return np.argmax(self.q_table[state_key])  # Best action
+
+    def learn(self, state, action, reward, next_state, done):
+        """Update Q-values based on experience"""
+        state_key = self.get_state_key(state)
+        next_state_key = self.get_state_key(next_state)
+
+        # Ensure states exist in Q-table
+        if state_key not in self.q_table:
+            self.q_table[state_key] = [0.0] * self.action_space.n
+
+        if next_state_key not in self.q_table:
+            self.q_table[next_state_key] = [0.0] * self.action_space.n
+
+        # Current Q-value
+        current_q = self.q_table[state_key][action]
+
+        # Max Q-value for next state
+        max_next_q = max(self.q_table[next_state_key])
+
+        # Q-learning formula
+        new_q = current_q + self.learning_rate * (
+                reward + (self.discount_factor * max_next_q * (1 - done)) - current_q
+        )
+
+        # Update Q-value
+        self.q_table[state_key][action] = new_q
+
+    def decay_exploration_rate(self, decay_factor=0.995, min_rate=0.01):
+        """Reduce exploration rate over time"""
+        self.exploration_rate = max(min_rate, self.exploration_rate * decay_factor)
+
+
+def run_simulation(use_gui=True, episodes=50):
+    """Run RL simulation for sustainable traffic control"""
+    # Create timestamped results directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_dir = f"{OUT_DIR}_{timestamp}"
     Path(results_dir).mkdir(parents=True, exist_ok=True)
 
-    # Reset global emission data
-    global emission_data
+    # Reset global tracking data
+    global emission_data, waiting_data
     emission_data = {}
+    waiting_data = {}
 
-    # Store metrics manually
+    # Track metrics for analysis
     metrics = {
-        'step': [],
         'episode': [],
+        'step': [],
         'waiting_time': [],
         'co2_emission': [],
-        'reward': []
+        'reward': [],
+        'episode_reward': []
     }
 
     # Set up environment
@@ -135,201 +171,250 @@ def run_simulation(use_gui=True, episodes=20):
         route_file=ROUTE_FILE,
         out_csv_name=f'{results_dir}/metrics',
         use_gui=use_gui,
-        num_seconds=1000,  # Shorter simulation time
+        num_seconds=3600,
         delta_time=5,
         min_green=5,
         max_green=50,
-        reward_fn=sustainable_reward,
-        add_system_info=True,
-        add_per_agent_info=True
+        reward_fn=sustainable_reward
     )
 
-    # Print environment info
-    print("Observation space:", env.observation_space)
-    print("Action space:", env.action_space)
-    print("Traffic signal IDs:", env.ts_ids)
+    print("Environment info:")
+    print(f"Observation space: {env.observation_space}")
+    print(f"Action space: {env.action_space}")
+    print(f"Traffic signals: {env.ts_ids}")
+
+    # Create agents for each traffic signal
+    agents = {}
+    for ts in env.ts_ids:
+        agents[ts] = SimpleQLearning(
+            action_space=env.action_space,
+            learning_rate=0.1,
+            discount_factor=0.95,
+            exploration_rate=0.1  # Initial exploration rate
+        )
+
+    # Track episode rewards for learning curve
+    episode_rewards = []
 
     # Training loop
-    print(f"\nStarting simulation for {episodes} episodes...")
+    print(f"\nStarting training for {episodes} episodes...")
 
     for episode in range(episodes):
-        # Reset the environment
+        # Reset environment
         state = env.reset()
         done = {'__all__': False}
         episode_reward = 0
         step = 0
 
+        # Run episode
         while not done['__all__']:
-            # Choose action for each traffic signal
+            # Choose actions
             action = {}
             for ts in state.keys():
-                action[ts] = env.action_space.sample()  # Random actions for simplicity
+                action[ts] = agents[ts].choose_action(state[ts])
 
-            # Execute the action
+            # Take step
             next_state, reward, done, _ = env.step(action)
 
-            # Track episode statistics
-            episode_reward += sum(reward.values())
+            # Learn from experience
+            for ts in state.keys():
+                agents[ts].learn(
+                    state=state[ts],
+                    action=action[ts],
+                    reward=reward[ts],
+                    next_state=next_state[ts],
+                    done=done[ts]
+                )
 
-            # Record metrics every 5 steps
-            if step % 5 == 0:
-                # Get waiting time from the environment
-                if hasattr(env, 'metrics') and hasattr(env.metrics, 'data'):
-                    if 'system_total_waiting_time' in env.metrics.data and env.metrics.data[
-                        'system_total_waiting_time']:
-                        waiting_time = env.metrics.data['system_total_waiting_time'][-1]
-                    else:
-                        waiting_time = 0
-                else:
-                    # Fallback: calculate from traffic signals
-                    waiting_time = 0
-                    for ts_id in env.ts_ids:
-                        ts = env.traffic_signals[ts_id]
-                        waiting_times = ts.get_accumulated_waiting_time_per_lane()
-                        waiting_time += sum(waiting_times)
+            # Update state and track rewards
+            state = next_state
+            step_reward = sum(reward.values())
+            episode_reward += step_reward
 
-                # Get CO2 emissions from our global dict
-                co2 = 0
+            # Record metrics every 10 steps
+            if step % 10 == 0:
+                # Get current waiting time and emissions
+                total_waiting = 0
+                for ts_id in env.ts_ids:
+                    if ts_id in waiting_data and waiting_data[ts_id]:
+                        total_waiting += waiting_data[ts_id][-1]
+
+                total_co2 = 0
                 for ts_id in env.ts_ids:
                     if ts_id in emission_data and emission_data[ts_id]:
-                        co2 += emission_data[ts_id][-1]
+                        total_co2 += emission_data[ts_id][-1]
 
-                # Store metrics
-                metrics['step'].append(step)
+                # Record data
                 metrics['episode'].append(episode)
-                metrics['waiting_time'].append(waiting_time)
-                metrics['co2_emission'].append(co2)
-                metrics['reward'].append(episode_reward)
+                metrics['step'].append(step + episode * 200)
+                metrics['waiting_time'].append(total_waiting)
+                metrics['co2_emission'].append(total_co2)
+                metrics['reward'].append(step_reward)
+                metrics['episode_reward'].append(episode_reward)
 
-            # Move to next state
-            state = next_state
             step += 1
 
-            # End episode if we've reached the time limit
-            if step >= 200:  # Safety limit to prevent infinite loops
+            # Limit episode length
+            if step >= 200:
                 break
 
-        print(f"Episode {episode + 1}/{episodes} - Reward: {episode_reward:.2f} - Steps: {step}")
+        # Decay exploration rate
+        for ts in env.ts_ids:
+            agents[ts].decay_exploration_rate()
+
+        # Track episode results
+        episode_rewards.append(episode_reward)
+
+        # Report progress
+        print(
+            f"Episode {episode + 1}/{episodes} - Reward: {episode_reward:.2f} - Steps: {step} - Exploration: {agents[list(agents.keys())[0]].exploration_rate:.3f}")
 
     # Close environment
     env.close()
 
-    # Save our custom metrics to CSV
+    # Save metrics
     pd.DataFrame(metrics).to_csv(f"{results_dir}/custom_metrics.csv", index=False)
 
-    print(f"\nSimulation complete! Results saved to {results_dir}")
+    # Save episode rewards
+    pd.DataFrame({'episode': range(1, episodes + 1), 'reward': episode_rewards}).to_csv(
+        f"{results_dir}/episode_rewards.csv", index=False
+    )
+
+    # Plot learning curve
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, episodes + 1), episode_rewards)
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
+    plt.title('Learning Curve')
+    plt.grid(True)
+    plt.savefig(f"{results_dir}/learning_curve.png")
+
+    print(f"Training complete! Results saved to {results_dir}")
     return results_dir
 
 
 def analyze_results(results_dir):
-    """
-    Analyze and visualize the results of the simulation
-
-    Args:
-        results_dir: Directory containing the results
-    """
+    """Analyze and visualize the simulation results"""
     try:
-        # Try to find our custom metrics file first
-        custom_metrics_file = Path(results_dir) / "custom_metrics.csv"
-        if custom_metrics_file.exists():
-            print(f"Analyzing custom metrics from {custom_metrics_file}")
-            metrics = pd.read_csv(custom_metrics_file)
-        else:
-            # Try to find the standard metrics file
-            metrics_files = list(Path(results_dir).glob("metrics*.csv"))
-            if not metrics_files:
-                print(f"No metrics files found in {results_dir}")
-                return
-
-            metrics_file = metrics_files[0]
-            print(f"Analyzing metrics from {metrics_file}")
+        # Load custom metrics
+        metrics_file = Path(results_dir) / "custom_metrics.csv"
+        if metrics_file.exists():
             metrics = pd.read_csv(metrics_file)
+        else:
+            print(f"No metrics file found at {metrics_file}")
+            return
 
-        # Create results directory
+        # Create plots directory
         plots_dir = Path(results_dir) / "plots"
         plots_dir.mkdir(exist_ok=True)
 
-        # Plot waiting time evolution
-        plt.figure(figsize=(12, 8))
+        # Plot waiting time, emissions, and rewards
+        plt.figure(figsize=(12, 12))
 
-        plt.subplot(2, 1, 1)
-        waiting_column = 'waiting_time'
-        if waiting_column not in metrics.columns and 'system_total_waiting_time' in metrics.columns:
-            waiting_column = 'system_total_waiting_time'
+        # Waiting time by episode
+        plt.subplot(3, 1, 1)
+        episode_waiting = metrics.groupby('episode')['waiting_time'].mean().reset_index()
+        plt.plot(episode_waiting['episode'], episode_waiting['waiting_time'])
+        plt.xlabel('Episode')
+        plt.ylabel('Average Waiting Time')
+        plt.title('Traffic Efficiency Improvement')
+        plt.grid(True)
 
-        if waiting_column in metrics.columns:
-            plt.plot(metrics['step'], metrics[waiting_column])
-            plt.xlabel('Simulation Step')
-            plt.ylabel('Total Waiting Time (s)')
-            plt.title('Traffic Efficiency Evolution')
-            plt.grid(True)
-        else:
-            print("Warning: No waiting time column found in metrics")
+        # CO2 emissions by episode
+        plt.subplot(3, 1, 2)
+        episode_co2 = metrics.groupby('episode')['co2_emission'].mean().reset_index()
+        plt.plot(episode_co2['episode'], episode_co2['co2_emission'], color='green')
+        plt.xlabel('Episode')
+        plt.ylabel('Average CO2 Emissions (g)')
+        plt.title('Environmental Impact Reduction')
+        plt.grid(True)
 
-        # Plot CO2 emissions evolution
-        plt.subplot(2, 1, 2)
-        if 'co2_emission' in metrics.columns:
-            plt.plot(metrics['step'], metrics['co2_emission'], color='green')
-            plt.xlabel('Simulation Step')
-            plt.ylabel('CO2 Emissions (g)')
-            plt.title('Environmental Impact Evolution')
-            plt.grid(True)
-        else:
-            print("Warning: 'co2_emission' column not found in metrics")
+        # Rewards by episode
+        plt.subplot(3, 1, 3)
+        episode_rewards = pd.read_csv(Path(results_dir) / "episode_rewards.csv")
+        plt.plot(episode_rewards['episode'], episode_rewards['reward'], color='red')
+        plt.xlabel('Episode')
+        plt.ylabel('Total Episode Reward')
+        plt.title('Learning Progress')
+        plt.grid(True)
 
         plt.tight_layout()
         plt.savefig(plots_dir / "sustainability_metrics.png")
 
-        # Generate a summary report
-        with open(plots_dir / "summary.txt", "w") as f:
-            f.write("Sustainable Traffic Control - Summary Report\n")
-            f.write("===========================================\n\n")
-            f.write("This experiment implemented a reinforcement learning approach\n")
-            f.write("to traffic signal control that addresses SDG 11: Sustainable Cities\n")
-            f.write("by considering both traffic efficiency and environmental impact.\n\n")
+        # Generate summary report
+        with open(plots_dir / "summary_report.md", "w") as f:
+            f.write("# Sustainable Traffic Control with Reinforcement Learning\n\n")
+            f.write("## SDG 11: Sustainable Cities and Communities\n\n")
 
-            f.write("Key metrics:\n")
-            if waiting_column in metrics.columns:
-                avg_waiting = metrics[waiting_column].mean()
-                max_waiting = metrics[waiting_column].max()
-                f.write(f"- Average waiting time: {avg_waiting:.2f} seconds\n")
-                f.write(f"- Maximum waiting time: {max_waiting:.2f} seconds\n")
+            f.write("This experiment applies reinforcement learning to traffic signal control\n")
+            f.write("with a focus on sustainability metrics relevant to SDG 11.\n\n")
 
-            if 'co2_emission' in metrics.columns:
-                avg_co2 = metrics['co2_emission'].mean()
-                total_co2 = metrics['co2_emission'].sum() * 5  # Assuming 5 seconds per step
-                f.write(f"- Average CO2 emissions: {avg_co2:.2f} g/s\n")
-                f.write(f"- Total CO2 emissions: {total_co2:.2f} g over simulation period\n")
+            f.write("## Performance Metrics\n\n")
 
-            f.write("\nThis study demonstrates how intelligent traffic signal control\n")
-            f.write("can contribute to more sustainable urban environments by reducing\n")
-            f.write("both congestion and emissions, aligning with SDG 11 goals.\n")
+            # Calculate improvement metrics
+            first_5_waiting = metrics[metrics['episode'] < 5]['waiting_time'].mean()
+            last_5_waiting = metrics[metrics['episode'] >= metrics['episode'].max() - 5]['waiting_time'].mean()
+            waiting_improvement = ((first_5_waiting - last_5_waiting) / first_5_waiting) * 100
 
-        print(f"Analysis complete! Plots and summary saved to {plots_dir}")
+            first_5_co2 = metrics[metrics['episode'] < 5]['co2_emission'].mean()
+            last_5_co2 = metrics[metrics['episode'] >= metrics['episode'].max() - 5]['co2_emission'].mean()
+            co2_improvement = ((first_5_co2 - last_5_co2) / first_5_co2) * 100
 
+            first_5_reward = episode_rewards[episode_rewards['episode'] <= 5]['reward'].mean()
+            last_5_reward = episode_rewards[episode_rewards['episode'] > episode_rewards['episode'].max() - 5][
+                'reward'].mean()
+            reward_improvement = ((last_5_reward - first_5_reward) / abs(first_5_reward)) * 100
+
+            f.write(f"### Traffic Efficiency\n")
+            f.write(f"- Starting waiting time: {first_5_waiting:.2f} seconds\n")
+            f.write(f"- Final waiting time: {last_5_waiting:.2f} seconds\n")
+            f.write(f"- Improvement: {waiting_improvement:.1f}%\n\n")
+
+            f.write(f"### Environmental Impact\n")
+            f.write(f"- Starting CO2 emissions: {first_5_co2:.2f} g\n")
+            f.write(f"- Final CO2 emissions: {last_5_co2:.2f} g\n")
+            f.write(f"- Reduction: {co2_improvement:.1f}%\n\n")
+
+            f.write(f"### Learning Performance\n")
+            f.write(f"- Starting average reward: {first_5_reward:.2f}\n")
+            f.write(f"- Final average reward: {last_5_reward:.2f}\n")
+            f.write(f"- Improvement: {reward_improvement:.1f}%\n\n")
+
+            f.write("## SDG 11 Relevance\n\n")
+            f.write("This implementation addresses the following SDG 11 targets:\n\n")
+            f.write("1. **Sustainable Transportation**: By optimizing traffic flow and reducing waiting times\n")
+            f.write("2. **Environmental Sustainability**: By explicitly considering and reducing vehicle emissions\n")
+            f.write("3. **Resource Efficiency**: By making better use of existing infrastructure\n\n")
+
+            f.write("The multi-objective reward function balances these priorities with weights of:\n")
+            f.write("- 80% for traffic efficiency (waiting times and queue length)\n")
+            f.write("- 20% for environmental impact (CO2 emissions)\n\n")
+
+            f.write("This weighting can be adjusted based on specific urban priorities and needs.\n")
+
+        print(f"Analysis complete! Results saved to {plots_dir}")
     except Exception as e:
         print(f"Error analyzing results: {e}")
 
 
 if __name__ == "__main__":
-    print("Sustainable Traffic Control with SUMO-RL")
-    print("========================================")
+    print("Sustainable Traffic Control with SUMO")
+    print("====================================")
     print("This script implements a reinforcement learning approach to traffic")
-    print("signal control that addresses SDG 11: Sustainable Cities by considering")
-    print("both traffic efficiency and environmental impact.\n")
+    print("signal control that addresses SDG 11: Sustainable Cities.\n")
 
     # Ask for GUI mode
     use_gui = input("Run with GUI? (y/n): ").lower().startswith('y')
 
     # Ask for number of episodes
-    episodes = 5
+    episodes = 50
     try:
         episodes = int(input(f"Number of episodes (default: {episodes}): ") or episodes)
     except ValueError:
         print(f"Using default value: {episodes}")
 
-    # Run the simulation
+    # Run simulation
     results_dir = run_simulation(use_gui=use_gui, episodes=episodes)
 
-    # Analyze the results
+    # Analyze results
     analyze_results(results_dir)
