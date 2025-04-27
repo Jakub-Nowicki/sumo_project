@@ -133,6 +133,8 @@ def sustainable_reward(traffic_signal):
              (throughput_weight * throughput_reward) + \
              movement_reward
 
+    reward = max(-100, min(50, reward))
+
     return reward
 
 
@@ -156,6 +158,11 @@ class EnhancedQAgent:
         # Track recently chosen actions to avoid oscillation
         self.recent_actions = deque(maxlen=10)
 
+    def decay_exploration(self):
+        """Decay exploration rate"""
+        self.exploration_rate = max(self.min_exploration_rate,
+                                    self.exploration_rate * self.exploration_decay)
+
     def discretize_state(self, state):
         """Convert continuous state to discrete representation"""
         if isinstance(state, np.ndarray):
@@ -178,6 +185,10 @@ class EnhancedQAgent:
 
             return phase_info + tuple(traffic_features)
         return str(state)
+
+    def get_table_size(self):
+        """Return size of Q-table (for monitoring memory usage)"""
+        return len(self.q_table)
 
     def get_q_value(self, state, action):
         """Get Q-value with defaults for new states"""
@@ -212,20 +223,33 @@ class EnhancedQAgent:
         return random.choice(best_actions)
 
     def store_experience(self, state, action, reward, next_state, done):
-        """Store experience in replay buffer"""
+        """Store experience in replay buffer with priority for negative rewards"""
         self.memory.append((state, action, reward, next_state, done))
+
+        # Add duplicate entries for highly negative rewards to increase learning priority
+        if reward < -5.0:  # Threshold for considering an experience particularly bad
+            # Add this bad experience again to increase its sampling probability
+            self.memory.append((state, action, reward, next_state, done))
 
         # Also update recent actions
         self.recent_actions.append(action)
 
     def learn(self):
-        """Learn from a batch of experiences"""
-        if len(self.memory) < 32:  # Wait until we have enough experiences
+        """Learn from a batch of experiences with adaptive learning rate"""
+        if len(self.memory) < 32:
             return
 
-        # Sample a small batch of experiences
+        # Sample experiences as before
         batch_size = min(32, len(self.memory))
         batch = random.sample(self.memory, batch_size)
+
+        # Calculate average reward in batch to adjust learning rate
+        avg_reward = sum(reward for _, _, reward, _, _ in batch) / batch_size
+
+        # Lower learning rate for very negative rewards to avoid overreaction
+        adaptive_lr = self.learning_rate
+        if avg_reward < -50:
+            adaptive_lr = self.learning_rate * 0.5
 
         for state, action, reward, next_state, done in batch:
             # Get current Q-value
@@ -244,17 +268,8 @@ class EnhancedQAgent:
             else:
                 target = reward + self.discount_factor * max(self.q_table[next_state_key])
 
-            # Update Q-value
-            self.q_table[state_key][action] += self.learning_rate * (target - self.q_table[state_key][action])
-
-    def decay_exploration(self):
-        """Decay exploration rate"""
-        self.exploration_rate = max(self.min_exploration_rate,
-                                    self.exploration_rate * self.exploration_decay)
-
-    def get_table_size(self):
-        """Return size of Q-table (for monitoring memory usage)"""
-        return len(self.q_table)
+            # Use adaptive learning rate
+            self.q_table[state_key][action] += adaptive_lr * (target - self.q_table[state_key][action])
 
 
 def run_simulation(use_gui=True, episodes=50):
@@ -290,7 +305,7 @@ def run_simulation(use_gui=True, episodes=50):
         route_file=ROUTE_FILE,
         out_csv_name=f'{results_dir}/metrics',
         use_gui=use_gui,
-        num_seconds=3600,  # 1 hour simulation
+        num_seconds=7200,  # 1 hour simulation
         delta_time=5,  # 5-second time steps
         min_green=5,  # Minimum green phase duration
         max_green=50,  # Maximum green phase duration
