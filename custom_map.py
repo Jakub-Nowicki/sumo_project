@@ -22,9 +22,8 @@ else:
 
 from sumo_rl import SumoEnvironment
 
-NET_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\custom_map\grid.net.xml'
-ROUTE_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\custom_map\grid-routes.rou.xml'
-
+NET_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\custom_map\mynetwork.net.xml'
+ROUTE_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\custom_map\routes.rou.xml'
 # Create output directory
 OUT_DIR = 'results/custom_map_test'
 Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
@@ -103,6 +102,9 @@ def run_simulation(use_gui=True, episodes=20):
 
     # Set up environment
     try:
+        print(f"Creating environment with net file: {NET_FILE}")
+        print(f"Route file: {ROUTE_FILE}")
+
         env = SumoEnvironment(
             net_file=NET_FILE,
             route_file=ROUTE_FILE,
@@ -116,9 +118,21 @@ def run_simulation(use_gui=True, episodes=20):
         )
 
         print("Environment created successfully")
-        print(f"Observation space: {env.observation_space}")
-        print(f"Action space: {env.action_space}")
-        print(f"Traffic signals: {env.ts_ids}")
+        print(f"Traffic signals found: {env.ts_ids}")
+
+        if not env.ts_ids or len(env.ts_ids) == 0:
+            print("ERROR: No traffic signals found in the network.")
+            print("Checking if network file exists...")
+            if os.path.exists(NET_FILE):
+                print(f"Network file exists. Size: {os.path.getsize(NET_FILE)} bytes")
+            else:
+                print("Network file does not exist!")
+            print("Checking if route file exists...")
+            if os.path.exists(ROUTE_FILE):
+                print(f"Route file exists. Size: {os.path.getsize(ROUTE_FILE)} bytes")
+            else:
+                print("Route file does not exist!")
+            return None
 
         # Create agents for each traffic signal
         agents = {}
@@ -200,6 +214,7 @@ def run_simulation(use_gui=True, episodes=20):
         print(f"Error during simulation: {e}")
         import traceback
         traceback.print_exc()
+        return None
 
     finally:
         # Ensure environment is closed even if there's an error
