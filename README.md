@@ -16,8 +16,8 @@ it optimizes traffic efficiency, CO₂ emissions, and vehicle throughput to supp
    ```
 2. **clone this repository**
    ```bash
-   git clone <this-repo-url>
-   cd <this-repo-folder>
+   git clone https://github.com/Jakub-Nowicki/sumo_project.git
+   cd sumo_project
    ```
 3. **install Python dependencies**
    ```bash
@@ -59,4 +59,7 @@ python sustainable_traffic_control.py
 ├── README.md                         # this file
 └── nets/                             # SUMO network & route files (from sumo-rl)
 ```
+
+## License
+MIT
 
