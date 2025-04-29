@@ -414,7 +414,7 @@ def run_simulation(use_gui=True, episodes=50):
                 step += 1
 
                 # Limit episode length
-                if step >= 200:
+                if step >= 300:
                     break
 
             # Decay exploration rate after each episode
