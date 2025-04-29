@@ -1,46 +1,62 @@
 # Enhanced Sustainable Traffic Control
 
 ## Overview
-This project implements an enhanced reinforcement learning approach to traffic signal control using the SUMO-RL framework. It balances traffic efficiency, environmental impact (CO₂ emissions), and throughput at a two-way intersection to address Sustainable Development Goal 11.
+This repository provides an enhanced reinforcement learning solution for traffic signal control at a two-way intersection using the [SUMO-RL](https://github.com/LucasAlegre/sumo-rl) framework
+it optimizes traffic efficiency, CO₂ emissions, and vehicle throughput to support Sustainable Development Goal 11 (sustainable cities)
 
 ## Prerequisites
-- Clone the SUMO-RL repository:
-  ```bash
-git clone https://github.com/LucasAlegre/sumo-rl.git
-  ```
-- install SUMO and set the `SUMO_HOME` environment variable to your SUMO installation path
-- Python 3.7 or higher
+- **SUMO** installed (version ≥ 1.6.0)
+- **Python** 3.7 or higher
+- **git** for cloning repositories
 
-## Installation
-1. clone this repository:
+## Setup
+1. **clone SUMO-RL repository**
    ```bash
-git clone <this-repo-url>
-cd <this-repo-folder>
+   git clone https://github.com/LucasAlegre/sumo-rl.git
    ```
-2. install Python dependencies:
+2. **clone this repository**
    ```bash
-pip install -r requirements.txt
+   git clone <this-repo-url>
+   cd <this-repo-folder>
    ```
+3. **install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **set SUMO_HOME** environment variable to your SUMO installation path
+   - on linux/macOS:
+     ```bash
+     export SUMO_HOME="/path/to/sumo"
+     ```
+   - on Windows (PowerShell):
+     ```powershell
+     setx SUMO_HOME C:\path\to\sumo
+     ```
+
+## Configuration
+- open `sustainable_traffic_control.py`
+- update `NET_FILE` and `ROUTE_FILE` constants if your `nets/` folder is in a different location
+- ensure the `nets/` directory from the cloned SUMO-RL repository is accessible at the specified paths
 
 ## Usage
 run the main script to start training:
 ```bash
 python sustainable_traffic_control.py
 ```
-- you'll be prompted to choose GUI mode and number of episodes
-- results (metrics CSV, episode_rewards.csv, plots) will be saved under `results/YYYYMMDD_HHMMSS`
+- you will be prompted:
+  - whether to use SUMO GUI (y/n)
+  - number of training episodes
+- a timestamped folder under `results/` will store:
+  - `metrics.csv` (SUMO-RL output)
+  - `episode_rewards.csv` (per-episode reward log)
+  - `learning_curve.png` (reward plot)
+  - `plots/` subfolder with additional performance charts
 
 ## Project Structure
 ```
-├── sustainable_traffic_control.py    # main training and analysis script
+├── sustainable_traffic_control.py    # main training & analysis script
 ├── requirements.txt                  # Python dependencies
-└── nets/                             # SUMO network and route definitions (from sumo-rl)
+├── README.md                         # this file
+└── nets/                             # SUMO network & route files (from sumo-rl)
 ```
-
-## Notes
-- ensure that the `nets/` folder from the cloned `sumo-rl` repository is accessible at the paths defined in the script
-- adjust `NET_FILE` and `ROUTE_FILE` constants if your directory structure differs
-
-## License
-MIT
 
