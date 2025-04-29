@@ -34,14 +34,14 @@ it optimizes traffic efficiency, CO₂ emissions, and vehicle throughput to supp
      ```
 
 ## Configuration
-- open `sustainable_traffic_control.py`
-- update `NET_FILE` and `ROUTE_FILE` constants if your `nets/` folder is in a different location
-- ensure the `nets/` directory from the cloned SUMO-RL repository is accessible at the specified paths
+- open `2way_rl_script.py`
+- update `NET_FILE` and `ROUTE_FILE` constants if your `sumo-rl/sumo_rl/nets/` folder is in a different location
+- ensure the `sumo-rl/sumo_rl/nets/` directory from the cloned SUMO-RL repository is accessible at the specified paths
 
 ## Usage
 run the main script to start training:
 ```bash
-python sustainable_traffic_control.py
+python 2way_rl_script.py
 ```
 - you will be prompted:
   - whether to use SUMO GUI (y/n)
@@ -54,12 +54,10 @@ python sustainable_traffic_control.py
 
 ## Project Structure
 ```
-├── sustainable_traffic_control.py    # main training & analysis script
-├── requirements.txt                  # Python dependencies
-├── README.md                         # this file
-└── nets/                             # SUMO network & route files (from sumo-rl)
+├── 2way_rl_script.py    # main training & analysis script
+├── requirements.txt      # Python dependencies
+├── README.md             # this file
+├── results/              # timestamped output directories
+└── sumo-rl/              # cloned SUMO-RL repository with nets definitions
 ```
-
-## License
-MIT
 
