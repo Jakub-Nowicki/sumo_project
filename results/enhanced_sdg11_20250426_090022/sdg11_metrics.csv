@@ -1,1 +1,0 @@
-episode,step,waiting_time,safety,pedestrian_wait,throughput,congestion,reward,episode_reward,exploration_rate,learning_rate,q_table_size
