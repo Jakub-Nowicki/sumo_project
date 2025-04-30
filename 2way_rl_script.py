@@ -25,8 +25,7 @@ NET_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl\s
 ROUTE_FILE = r'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\sumo-rl\sumo_rl\nets\2way-single-intersection\single-intersection-vhvh.rou.xml'
 
 # output directory for results
-# absolute output directory for results
-OUT_DIR = 'C:\Users\jjnow\OneDrive\Desktop\repositories\sumo_project\results'
+OUT_DIR = '2way_rl_sript-plots'
 Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
 # global dicts to track emissions, waiting, throughput, and vehicle counts
